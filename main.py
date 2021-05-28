@@ -1,10 +1,9 @@
 import argparse
 import json
-import pickle
 from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup as bs
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--json", nargs='?', const="results.json")
@@ -29,12 +28,13 @@ error = "Возникла ошибка!"
 def get_product(url):
     try:
         response = requests.get(url, headers=HEADERS, params=params)
+        timeout = 5
         if response.ok:
             return response
         else:
             return error
-    except Exception:
-        print('Что-то пошло не так :(')
+    except (requests.ConnectionError, requests.Timeout):
+        print("Проверьте соединение с интерентом!")
 
 
 def get_product_id(data):
@@ -68,21 +68,25 @@ def get_info(product_id):
 
 
 def parse():
-    response = get_product(URL)
-    if len(response.json()) == 0:
-        print("Товаров по вашему запросу не найдено")
-    elif response != error:
-        product_ids = get_product_id(response)
-        if len(product_ids) > 1:
-            print("Найдено более одного товара с таким названием")
-        a = list(map(get_info, product_ids))
-        if file:
-            with open(file, "w", encoding='utf-8') as f:
-                data = json.dumps(a, sort_keys=False, indent=4, ensure_ascii=False, separators=(',', ': '))
-                f.write(data)
-        return response
-    else:
-        print("К сожалению, возникли ошибки :(")
+    try:
+        response = get_product(URL)
+        if len(response.json()) == 0:
+            print("Товаров по вашему запросу не найдено")
+        elif response != error:
+            product_ids = get_product_id(response)
+            if len(product_ids) > 1:
+                print("Найдено более одного товара с таким названием")
+            a = list(map(get_info, product_ids))
+            if file:
+                with open(file, "w", encoding='utf-8') as f:
+                    data = json.dumps(a, sort_keys=False, indent=4, ensure_ascii=False, separators=(',', ': '))
+                    f.write(data)
+            return response
+        else:
+            print("К сожалению, возникли ошибки :(")
+    except Exception:
+        print("Не удалось выполнить поиск")
+
 
 
 parse()
