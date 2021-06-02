@@ -1,15 +1,10 @@
 import argparse
 import json
 from urllib.parse import urljoin
-
 import requests
 from bs4 import BeautifulSoup as bs
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--json", nargs='?', const="results.json")
-parser.add_argument("-q", "--query", required=True)
-title = parser.parse_args().__getattribute__("query")
-file = parser.parse_args().__getattribute__("json")
 
 URL = 'https://shop.green-market.by/api/v1/products/search/'
 HEADERS = {
@@ -17,76 +12,70 @@ HEADERS = {
                   'Chrome/90.0.4430.212 Safari/537.36',
 }
 
-params = {
-    'search': title,
-    'storeId': 2
-}
-
-error = "Возникла ошибка!"
+ERROR = "Error! Something went wrong..."
 
 
-def get_product(url):
+def get_search_response(url, params=None):
     try:
         response = requests.get(url, headers=HEADERS, params=params)
-        timeout = 5
         if response.ok:
             return response
         else:
-            return error
+            return ERROR
     except (requests.ConnectionError, requests.Timeout):
-        print("Проверьте соединение с интерентом!")
+        print("Check your internet connection!")
 
 
-def get_product_id(data):
-    details = data.json()
+def get_product_id(details):
     id_list = []
-    for item in range(len(details)):
-        id_list.append(details[item]['id'])
-    print(id_list)
+    for item in details:
+        id_list.append(item.get('id'))
     return id_list
 
 
 def get_info(product_id):
     url = urljoin('https://shop.green-market.by/product/', str(product_id))
-    page_info = requests.get(url).text
-    soup = bs(page_info, 'html.parser')
-    info = {}
-    item_count = len(soup.findAll('li', class_="product-modal_infoItem__3TCs0"))
-    name = soup.find('h2', class_="product-modal_productTitle__2Hyco")
-    price = soup.find('span', class_="product-modal_productValue__jTrwS")
-    info['Название'] = name.text
-    info['Цена в рублях'] = price.text
-    info['Масса'] = \
-        soup.find('ul', class_="product-modal_infoList__2ToS2").contents[item_count - 1].contents[1].contents[0]
-    info['Производитель'] = \
-        soup.find('ul', class_="product-modal_infoList__2ToS2").contents[item_count - 2].contents[1].contents[0]
-    info['Артикул'] = \
-        soup.find('ul', class_="product-modal_infoList__2ToS2").contents[item_count - 3].contents[1].contents[0]
-    print(info)
-    return info
-
+    response = get_search_response(url)
+    if response:
+        page_info = get_search_response(url).text
+        soup = bs(page_info, 'html.parser')
+        info = {}
+        name = soup.find('h2', class_="product-modal_productTitle__2Hyco")
+        price = soup.find('span', class_="product-modal_productValue__jTrwS")
+        items = soup.findAll('li', class_="product-modal_infoItem__3TCs0")
+        info['Название'] = name.text
+        info['Цена в рублях'] = price.text
+        for item in items:
+            info[f'{item.contents[0].contents[0].text}'] = item.contents[1].contents[0]
+        print(info)
+        return info
 
 
 def parse():
-    try:
-        response = get_product(URL)
-        if len(response.json()) == 0:
-            print("Товаров по вашему запросу не найдено")
-        elif response != error:
-            product_ids = get_product_id(response)
+    parser.add_argument("--json", nargs='?', const="results.json")
+    parser.add_argument("-q", "--query", required=True)
+    title = parser.parse_args().query
+    file = parser.parse_args().json
+    params = {
+        'search': title,
+        'storeId': 2
+    }
+    response = get_search_response(URL, params)
+    if response:
+        data_json = response.json()
+        if not data_json:
+            print("No search results")
+        elif response != ERROR:
+            product_ids = get_product_id(data_json)
             if len(product_ids) > 1:
-                print("Найдено более одного товара с таким названием")
+                print("Found more than one product with the same name")
             a = list(map(get_info, product_ids))
-            if file:
-                with open(file, "w", encoding='utf-8') as f:
-                    data = json.dumps(a, sort_keys=False, indent=4, ensure_ascii=False, separators=(',', ': '))
-                    f.write(data)
-            return response
-        else:
-            print("К сожалению, возникли ошибки :(")
-    except Exception:
-        print("Не удалось выполнить поиск")
+        if file:
+            with open(file, "w", encoding='utf-8') as f:
+                data = json.dumps(a, sort_keys=False, indent=4, ensure_ascii=False, separators=(',', ': '))
+                f.write(data)
+        return response
 
 
-
-parse()
+if __name__ == "__main__":
+    parse()
